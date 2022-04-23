@@ -147,7 +147,7 @@ contract volOracle {
     }
 
     function _roundVol(Currency _currency) public returns (int256) {
-        int256[4] memory _p;
+        int256[] memory _p;
         uint256 round = roundId;
         _p[0] = prices[round][_currency];
         _p[1] = prices[round - 1][_currency];
