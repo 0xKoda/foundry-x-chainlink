@@ -1,7 +1,8 @@
 pragma solidity ^0.8.7;
 import "../lib/openzeppelin-contracts/contracts/utils/math/SafeMath.sol";
+import {Math} from "../lib/openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "./PriceFeed.sol";
-import "./FancyMath.sol";
+import {StandardDev} from "./FancyMath.sol";
 
 // import "./ScalingPriceOracle.sol";
 interface Handler {
@@ -9,49 +10,60 @@ interface Handler {
 }
 
 contract volOracle {
-    StandardDev stD;
+    /// @notice the denominator for basis points granularity (10,000)
+    uint256 public constant BASIS_POINTS_GRANULARITY = 10_000;
+
+    /// @notice the denominator for basis points granularity (10,000) expressed as an int data type
+    int256 public constant BP_INT = int256(BASIS_POINTS_GRANULARITY);
     uint256 public lastTimeStamp;
     uint256 public lastPrice;
     uint256 public quarterTime;
-    uint256 public globalVolatility;
-    uint256 public threshold; // 1% volatility threshold
+    int256 public globalVolatility;
+    int256 public threshold; // 1% volatility threshold
     uint256 public _quarterTime;
-    uint256 public override oraclePrice = 1e18;
+    uint256 public oraclePrice = 1e18;
     uint256 public WINDOW = 30 days;
     uint256 public roundId;
-    int256 public override monthlyChangeRateBasisPoints;
+    int256 public monthlyChangeRateBasisPoints;
     uint256 public TIMEFRAME = 90 days;
-    uint256 public override DEVIATOR = 1000000000;
+    int256 public DEVIATOR = 1000000000;
     Handler handler;
+    address private pAUD;
+    address private pEUR;
+    address private pPHP = 0x3d147cD9aC957B2a5F968dE9d1c6B9d0872286a0;
+    uint256 public startTime;
 
-    PriceConsumerV3AUD pAUD;
-    PriceConsumerV3GBP pGBP;
-    PriceConsumerV3EUR pEUR;
-    PriceConsumerV3AUD pSGD;
-    PriceConsumerV3AUD pUSD;
+    event Round(uint256);
+    event RRMonthlyChangeRateUpdate(
+        uint256 _monthlyChangeRateBasisPoints,
+        uint256 _roundId
+    );
+
+    // PriceConsumerV3AUD pAUD;
+    // PriceConsumerV3GBP pGBP;
+    // PriceConsumerV3EUR pEUR;
+    // PriceConsumerV3AUD pSGD;
+    // PriceConsumerV3AUD pUSD;
+
     enum Currency {
-        GBP,
-        USD,
         EUR,
         AUD,
-        SGD,
+        PHP,
         GLOBAL
     }
 
     struct Data {
         uint256 aud;
-        uint256 sgd;
+        uint256 php;
         uint256 eur;
-        uint256 usd;
-        uint256 gbp;
     }
     struct Quarter {
-        uint256 vol;
+        int256 vol;
         uint256 rr;
     }
     mapping(Currency => Data) public data;
-    mapping(uint256 => mapping(Currency => uint256)) vol;
-    mapping(uint256 => mapping(Currency => uint256)) prices; // data[round][currency]
+    mapping(uint256 => mapping(Currency => int256)) vol;
+    mapping(uint256 => mapping(Currency => int256)) prices; // data[round][currency]
     mapping(uint256 => Data) _prices; // data[round] history of price and total round price
     mapping(uint256 => Quarter) quarter; // data[round] history of price and total round price
 
@@ -59,16 +71,17 @@ contract volOracle {
         WINDOW = updateInterval;
         lastTimeStamp = block.timestamp;
         lastPrice = 0;
-        handler = 0x1785e8491e7e9d771b2A6E9E389c25265F06326A;
+        handler = Handler(0x1785e8491e7e9d771b2A6E9E389c25265F06326A);
+        startTime = block.timestamp;
     }
 
     function poke() public {
         require(WINDOW < block.timestamp, "Window has not started yet");
         if (WINDOW < block.timestamp && quarterTime < block.timestamp) {
             uint256 round = getPrices();
-            uint256 _rate = _getGlobalVolatility(round);
+            int256 _rate = global_Volatility(round);
             oracleUpdateData();
-            emit globalVolatility(round, _rate);
+            oracleUpdateData();
             quarterTime = block.timestamp + TIMEFRAME;
         } else if (WINDOW < block.timestamp && quarterTime > block.timestamp) {
             uint256 round = getPrices();
@@ -78,47 +91,41 @@ contract volOracle {
 
     function getPrices() public view returns (uint256) {
         uint256 _roundId = roundId + 1;
-        uint256 _aud = uint256(
-            handler.getMinPrice(0x7E141940932E3D13bfa54B224cb4a16510519308)
+        uint256 _aud = handler.getMinPrice(
+            0x7E141940932E3D13bfa54B224cb4a16510519308
         );
-        uint256 _eur = uint256(pEUR.getLatestPrice());
-        uint256 _gbp = uint256(pGBP.getLatestPrice());
-        uint256 _sgd = uint256(pSGD.getLatestPrice());
-        uint256 _usd = uint256(pUSD.getLatestPrice());
-        prices[_roundId][Currency.AUD] = _aud;
-        prices[_roundId][Currency.EUR] = _eur;
-        prices[_roundId][Currency.GBP] = _gbp;
-        prices[_roundId][Currency.SGD] = _sgd;
-        prices[_roundId][Currency.USD] = _usd;
+        uint256 _eur = handler.getMinPrice(
+            0x116172B2482c5dC3E6f445C16Ac13367aC3FCd35
+        );
+        uint256 _php = handler.getMinPrice(
+            0x3d147cD9aC957B2a5F968dE9d1c6B9d0872286a0
+        );
+        prices[_roundId][Currency.AUD] = int256(_aud);
+        prices[_roundId][Currency.EUR] = int256(_eur);
+        prices[_roundId][Currency.PHP] = int256(_php);
         _roundId = roundId;
         _roundVol(Currency.AUD);
         _roundVol(Currency.EUR);
-        _roundVol(Currency.GBP);
-        _roundVol(Currency.SGD);
-        _roundVol(Currency.USD);
+        _roundVol(Currency.PHP);
         return roundId;
     }
 
-    function global_Volatility(uint256 _rId) public view returns (uint256) {
-        uint256[4] memory _vol;
-        uint256 _audVol = data[Currency.AUD].volatilityByRound[_rId];
-        uint256 _eurVol = data[Currency.EUR].volatilityByRound[_rId];
-        uint256 _gbpVol = data[Currency.GBP].volatilityByRound[_rId];
-        uint256 _sgdVol = data[Currency.SGD].volatilityByRound[_rId];
-        uint256 _usdVol = data[Currency.USD].volatilityByRound[_rId];
+    function global_Volatility(uint256 _rId) public view returns (int256) {
+        int256[] memory _vol;
+        int256 _audVol = vol[_rId][Currency.AUD];
+        int256 _eurVol = vol[_rId][Currency.EUR];
+        int256 _phpVol = vol[_rId][Currency.PHP];
         _vol[0] = _audVol;
         _vol[1] = _eurVol;
-        _vol[2] = _gbpVol;
-        _vol[3] = _sgdVol;
-        _vol[4] = _usdVol;
-        uint256 _gVol = stD.getStandardDeviation(_vol);
-        quarter[roundId].volatility = _gVol;
+        _vol[2] = _phpVol;
+        int256 _gVol = StandardDev.getStandardDeviation(_vol);
+        quarter[roundId].vol = _gVol;
         return _gVol;
     }
 
-    function oracleUpdateData() public returns (uint256) {
+    function oracleUpdateData() public returns (int256) {
         require(WINDOW > block.timestamp, "Oracle update is not available yet");
-        globalVolatility = globalVolatility(roundId);
+        globalVolatility = global_Volatility(roundId);
         globalVolatility > threshold
             ? _oracleUpdateChangeRate(change())
             : _oracleUpdateChangeRate(0);
@@ -127,9 +134,9 @@ contract volOracle {
 
     function change() internal returns (int256) {
         int256 newChangeRateBasisPoints;
-        uint256 r = (globalVolatility - quarter[roundId].volatility) /
-            quarter[roundId - 1].volatility;
-        if (globalVolatility > threshold && quarter < block.timestamp) {
+        int256 r = (globalVolatility - quarter[roundId].vol) /
+            quarter[roundId - 1].vol;
+        if (globalVolatility > threshold && TIMEFRAME < block.timestamp) {
             if (r < DEVIATOR) {
                 newChangeRateBasisPoints = int256(r);
                 return newChangeRateBasisPoints;
@@ -137,17 +144,16 @@ contract volOracle {
                 return 0;
             }
         }
-        return;
     }
 
-    function _roundVol(Currency _currency) public returns (uint256) {
-        uint256[4] memory _p;
+    function _roundVol(Currency _currency) public returns (int256) {
+        int256[4] memory _p;
         uint256 round = roundId;
-        _p.push(prices[round][_currency]);
-        _p.push(prices[round - 1][_currency]);
-        _p.push(prices[round - 2][_currency]);
-        _p.push(prices[round - 3][_currency]);
-        uint256 _Vol = stD.getStandardDeviation(_p);
+        _p[0] = prices[round][_currency];
+        _p[1] = prices[round - 1][_currency];
+        _p[2] = prices[round - 2][_currency];
+        _p[3] = prices[round - 3][_currency];
+        int256 _Vol = StandardDev.getStandardDeviation(_p);
         vol[round][_currency] = _Vol;
         return _Vol;
     }
@@ -159,9 +165,9 @@ contract volOracle {
         int256 currentChangeRateBasisPoints = monthlyChangeRateBasisPoints; /// save 1 SSLOAD
 
         /// emit even if there isn't an update
-        emit CPIMonthlyChangeRateUpdate(
-            currentChangeRateBasisPoints,
-            newChangeRateBasisPoints
+        emit RRMonthlyChangeRateUpdate(
+            uint256(currentChangeRateBasisPoints),
+            uint256(newChangeRateBasisPoints)
         );
 
         /// if the oracle change rate is the same as last time, save an SSTORE
@@ -172,25 +178,22 @@ contract volOracle {
         monthlyChangeRateBasisPoints = newChangeRateBasisPoints;
     }
 
-    function getCurrentOraclePrice() public view override returns (uint256) {
-        int256 oraclePriceInt = oraclePrice.toInt256();
+    function getCurrentOraclePrice() public view returns (uint256) {
+        int256 oraclePriceInt = int256(oraclePrice);
 
-        int256 timeDelta = Math
-            .min(block.timestamp - startTime, WINDOW)
-            .toInt256();
+        int256 timeDelta = int256(
+            Math.min(block.timestamp - startTime, WINDOW)
+        );
+
         int256 pricePercentageChange = (oraclePriceInt *
-            monthlyChangeRateBasisPoints) / Constants.BP_INT;
+            monthlyChangeRateBasisPoints) / BP_INT;
         int256 priceDelta = (pricePercentageChange * timeDelta) /
-            WINDOW.toInt256();
+            int256(WINDOW);
 
-        return (oraclePriceInt + priceDelta).toUint256();
-    }
-
-    function _getGlobalVolatility() internal returns (uint256) {
-        uint256 r = 0;
-        for (uint256 i = 0; i < 5; i++) {
-            r += Currency._currency.vol[i];
-        }
-        return r / 5;
+        return uint256(oraclePriceInt + priceDelta);
     }
 }
+// uint256 _eur = uint256(pEUR.getLatestPrice());
+// uint256 _gbp = uint256(pGBP.getLatestPrice());
+// uint256 _sgd = uint256(pSGD.getLatestPrice());
+// uint256 _usd = uint256(pUSD.getLatestPrice());
