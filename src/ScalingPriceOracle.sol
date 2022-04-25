@@ -16,8 +16,7 @@ import "./PriceFeed.sol";
 import "./FancyMath.sol";
 
 /// @notice contract that receives a chainlink price feed and then linearly interpolates that rate over
-/// a 28 day period into the VOLT price. Interest is compounded monthly when the rate is updated
-/// @author Elliot Friedman
+/// a 28 day period into the AER price. Interest is compounded monthly when the rate is updated
 contract ScalingPriceOracle is
     Timed,
     ChainlinkClient,
@@ -192,7 +191,7 @@ contract ScalingPriceOracle is
         _oracleUpdateChangeRate(aprBasisPoints);
     }
     //
-    
+
     function poke() public {
         require(window < block.timestamp, "Window has not started yet");
         if(window < block.timestamp && _quarterTime < block.timestamp){
