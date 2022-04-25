@@ -191,7 +191,8 @@ contract ScalingPriceOracle is
         /// store data and apply the change rate over the next month to the VOLT price
         _oracleUpdateChangeRate(aprBasisPoints);
     }
-
+    //
+    
     function poke() public {
         require(window < block.timestamp, "Window has not started yet");
         if(window < block.timestamp && _quarterTime < block.timestamp){

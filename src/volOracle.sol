@@ -193,6 +193,7 @@ contract volOracle {
         return uint256(oraclePriceInt + priceDelta);
     }
 }
+// 0x8c064bCf7C0DA3B3b090BAbFE8f3323534D84d68
 // uint256 _eur = uint256(pEUR.getLatestPrice());
 // uint256 _gbp = uint256(pGBP.getLatestPrice());
 // uint256 _sgd = uint256(pSGD.getLatestPrice());
