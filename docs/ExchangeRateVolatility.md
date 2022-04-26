@@ -1,0 +1,2 @@
+### Pre-amble
+Previous attempts at creating an inflation resistant stable coin have proven rudimentary at best. The use of US CPI data is an unreliable source for an inflationary hedge on the global stage, for reasons outlined below. Cryptocurrency is now part of the global financial stack, and as such, warrants the denomination in a currency that reflects the greater macro-economic state of the global economy, not just the US.

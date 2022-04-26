@@ -27,7 +27,7 @@ contract Vault is ERC4626 {
         uint256 rate;
         uint256 buffer;
     }
-    constructor(address _oracle, address _cVault) {
+    constructor(address _oracle, address _cVault, ERC20 underlying) ERC4626(underlying, "ARC", "ARCADIA"){
         gov = msg.sender;
         cVault = _cVault;
         backing = 0;
@@ -51,7 +51,7 @@ contract Vault is ERC4626 {
         backing += _in;
         _reBal();
     }
-    function _reBal() public view {
+    function _reBal() public {
         uint256 _in = backing.mulWadDown(RR + 1);
         if(asset.balanceOf(address(this)) > _in){
             uint256 out = asset.balanceOf(address(this)) - _in;
