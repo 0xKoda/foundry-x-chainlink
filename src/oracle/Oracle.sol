@@ -1,5 +1,5 @@
 pragma solidity ^0.8.0;
-import "./FancyMath.sol";
+import "../utils/FancyMath.sol";
 pragma experimental ABIEncoderV2;
 
 interface IStdReference {
@@ -24,7 +24,7 @@ interface IStdReference {
         returns (ReferenceData[] memory);
 }
 
-contract DemoOracle {
+contract Oracle {
     IStdReference ref;
     enum Currency {
         EUR,

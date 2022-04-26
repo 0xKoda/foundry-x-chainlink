@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.4;
 
-import {Vcon} from "../vcon/Vcon.sol";
-import {IVolt, Volt, IERC20} from "../volt/Volt.sol";
+import "../gov/vLex.sol";
+import {ERC4626, Vault, ERC20} from "../Vault.sol";
 import {ICore} from "./ICore.sol";
 import {Permissions} from "./Permissions.sol";
-import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "lib/openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
 
 /// @title Source of truth for AER Protocol
 /// @author Fei Protocol

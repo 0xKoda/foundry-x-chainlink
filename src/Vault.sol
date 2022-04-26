@@ -1,3 +1,4 @@
+pragma solidity ^0.8.10;
 import "../lib/solmate/src/mixins/ERC4626.sol";
 import "../lib/solmate/src/utils/FixedPointMathLib.sol";
 
@@ -10,6 +11,12 @@ interface IOracle {
     function getPrice() external view returns (uint256);
     function value() external view returns (uint256);
 }
+/* 
+ * @title Vault
+ * @dev The Vault is the core of the contract. It holds the value of the contract and the
+ *      oracle. The oracle is used to get the current price of the token.
+ * @dev The Vault manages backing of AER Token Value.
+ */
 
 contract Vault is ERC4626 {
     using FixedPointMathLib for uint256;
@@ -20,6 +27,7 @@ contract Vault is ERC4626 {
     address public cVault;
     uint256 public backing;
     address public oracle;
+    bool public paused;
 
     struct vaultBal {
         uint256 assetsVal;
@@ -47,6 +55,7 @@ contract Vault is ERC4626 {
         return total;
     }
     function afterDeposit(uint256 assets, uint256 shares) internal override {
+        require(paused == false, "minting is paused");
         uint256 _in = shares.mulWadDown(RR + 1);
         backing += _in;
         _reBal();
@@ -68,6 +77,10 @@ contract Vault is ERC4626 {
     }
     function testRR() public view returns (uint256){
         IOracle(oracle).value();
+    }
+    function pause() public {
+        require(gov == msg.sender, "Only gov can pause");
+        paused = true;
     }
 
 }
